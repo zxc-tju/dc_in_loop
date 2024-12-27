@@ -109,6 +109,7 @@ class MotionPlanner:
             return float('inf')
         
         distance = self._get_distance_to_conflict(vehicle_state, vehicle_id)
+        print(f'{vehicle_id}到冲突点距离', distance)
         current_speed = vehicle_state['v'] / 3.6
         
         if current_speed < 0.1:
@@ -124,6 +125,8 @@ class MotionPlanner:
         
         ego_time = self._get_time_to_conflict(ego_state, '0')
         other_time = self._get_time_to_conflict(other_state, '1')
+        print('主车距离冲突点时间', ego_time)
+        print('对向车距离冲突点时间', other_time)
         
         v_ego = ego_state['v']
         safe_time_gap = 3.0

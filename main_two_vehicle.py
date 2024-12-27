@@ -34,6 +34,7 @@ def callback(data):
     rospy.loginfo("接收到来自Ego的信息")
     DataFromEgo = copy.deepcopy(data)
     actionEgo, action1 = cal_action(DataFromEgo, DataFromVeh1, DataFromVehVirtual)
+    # actionEgo, action1 = cal_action(DataFromEgo, None, DataFromVehVirtual)
     hm_pubEgo.publish(actionEgo)
     hm_pubVeh1.publish(action1)
 
@@ -47,10 +48,10 @@ def callback2(data):
     global DataFromVehVirtual
     rospy.loginfo("接收到来自VehVirtual的信息")
     DataFromVehVirtual = copy.deepcopy(data.RedisVirtualVehicles[0])
-    print(data.RedisVirtualVehicles)
+    # print(data.RedisVirtualVehicles)
 
 
-def cal_action(data1, data2, data3):
+def cal_action(data1, data2=None, data3=None):
     actionEgo = Cooperate_planList()
     action1 = Cooperate_planList()
     actionEgo.Id = "0"
@@ -58,41 +59,52 @@ def cal_action(data1, data2, data3):
     current_time = rospy.Time.now()
 
     # 转换状态信息
-    vehicle_data = [data1, data2, data3]
+    vehicle_data = [data1]
+    if data2 is not None:
+        vehicle_data.append(data2)
+    if data3 is not None:
+        vehicle_data.append(data3)
     state_dict = lon_lat_to_xy(vehicle_data, platform="dc").get_pos()
     
     # 获取两车参考线
     parser = ReferenceLineParser()
-    reference_lines = parser.read_reference_lines('pre_map.csv')
+    reference_lines = parser.read_reference_lines('map/pre_map.csv')
     resampled_lines = parser.get_reference_line_segments(reference_lines, min_distance=1.0)
     
     # 计算主车的规划轨迹和加速度
     planner = MotionPlanner(state_dict, resampled_lines)
     state_dict['0']['a'] = planner.plan_ego_vehicle()
-    
+    print('主车加速度', state_dict['0']['a'])
     # 其他车辆沿参考线加速至目标速度，然后匀速行驶
-    state_dict['1']['a'] = planner.plan_other_vehicle()
-
+    if data2 is not None:
+        state_dict['1']['a'] = planner.plan_other_vehicle()
+        print('其他车加速度', state_dict['1']['a'])
     # 计算两车油门量
     calculator = ThrottleCalculator()
     byd_result = calculator.calculate(state_dict['0']['v'], state_dict['0']['a'], 0)
-    hongqi_result = calculator.calculate(state_dict['1']['v'], state_dict['1']['a'], 1)
+    if data2 is not None:
+        hongqi_result = calculator.calculate(state_dict['1']['v'], state_dict['1']['a'], 1)
+    else:
+        hongqi_result = 0
 
     # 将计算结果(实际上是油门量)赋值给refpoints的speed属性
     data1.refpoints[0].speed = str(byd_result)
-    data2.refpoints[0].speed = str(hongqi_result)
-
     actionEgo.refpoints = data1.refpoints
-    action1.refpoints = data2.refpoints
-    print('相应的油门量', actionEgo.refpoints[0].speed, action1.refpoints[0].speed)
-
+    
+    if data2 is not None:
+        data2.refpoints[0].speed = str(hongqi_result)
+        action1.refpoints = data2.refpoints
+        print('油门量', round(float(actionEgo.refpoints[0].speed), 2), round(float(action1.refpoints[0].speed), 2))
+    else:
+        print('油门量', round(float(actionEgo.refpoints[0].speed), 2))
+    
     # 记录车辆状态到CSV
     for vehicle_id, state in state_dict.items():
         # 只有车辆0和1有油门量数据
         throttle = 0.0
         if vehicle_id == '0':
             throttle = float(data1.refpoints[0].speed)
-        elif vehicle_id == '1':
+        elif vehicle_id == '1' and data2 is not None:
             throttle = float(data2.refpoints[0].speed)
         
         row = [
@@ -133,9 +145,8 @@ def setup_csv():
             continue
     
     # 新文件使用下一个序号，并加入时间戳
-    new_file_num = current_max + 1
     current_time = datetime.now().strftime('%Y%m%d_%H%M%S')
-    csv_filename = os.path.join(log_dir, f'test_log_{new_file_num}_{current_time}.csv')
+    csv_filename = os.path.join(log_dir, f'test_log_{current_time}.csv')
     
     # 创建文件并写入表头
     f = open(csv_filename, 'w', newline='')

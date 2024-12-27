@@ -34,7 +34,18 @@ class lon_lat_to_xy:
         state_dict = {}
         for veh in range(self.veh_num):
             data = self.data_list[veh]
-            x, y = proj(data.latitude, data.longitude)
+            x, y = proj(data.longitude, data.latitude)
+            # 打印车辆id
+            print('车辆id', veh)
+            # 打印原始坐标
+            # print('原始坐标', data.longitude, data.latitude)
+            # # 打印原始坐标数据类型
+            # print('原始坐标数据类型', type(data.longitude), type(data.latitude))
+            # 打印原始坐标数据类型
+            print('坐标转换结果', x, y)
+            # # 打印坐标转换结果数据类型
+            # print('坐标转换结果数据类型', type(x), type(y))
+
             
             # 根据平台处理速度单位
             speed = float(data.speed)
@@ -42,6 +53,9 @@ class lon_lat_to_xy:
                 speed = speed * 3.6    # m/s 转换为 km/h
             # 实车平台保持原样（已经是km/h）
             
+            # 打印速度
+            print('速度', round(speed, 2), 'km/h')
+
             state_dict[str(veh)] = {
                 'x': x,
                 'y': y,
@@ -145,15 +159,15 @@ class ReferenceLineParser:
         
         reference_lines = {}
         for name, group in grouped:
-            print(f"\n处理参考线 {name}:")
+            # print(f"\n处理参考线 {name}:")
             
             # 直接使用X、Y坐标
             x_values = group['X'].values
             y_values = group['Y'].values
             
             # 打印坐标范围
-            print(f"X坐标范围: {x_values.min():.6f} 到 {x_values.max():.6f}")
-            print(f"Y坐标范围: {y_values.min():.6f} 到 {y_values.max():.6f}")
+            # print(f"X坐标范围: {x_values.min():.6f} 到 {x_values.max():.6f}")
+            # print(f"Y坐标范围: {y_values.min():.6f} 到 {y_values.max():.6f}")
             
             # 将坐标原点平移到数据范围的中心
             x_center = (x_values.max() + x_values.min()) / 2
@@ -168,10 +182,10 @@ class ReferenceLineParser:
                 'time': group['Time'].values
             }
             
-            print(f"处理后坐标范围:")
-            print(f"X: {x_meters.min():.2f} 到 {x_meters.max():.2f} 米")
-            print(f"Y: {y_meters.min():.2f} 到 {y_meters.max():.2f} 米")
-            print(f"成功处理 {name}: {len(x_meters)} 个点")
+            # print(f"处理后坐标范围:")
+            # print(f"X: {x_meters.min():.2f} 到 {x_meters.max():.2f} 米")
+            # print(f"Y: {y_meters.min():.2f} 到 {y_meters.max():.2f} 米")
+            # print(f"成功处理 {name}: {len(x_meters)} 个点")
         
         return reference_lines
 
@@ -231,12 +245,12 @@ class ReferenceLineParser:
                     'time': t_interp
                 }
                 
-                print(f"重采样 {name}:")
-                print(f"原始点数: {len(x)}, 重采样后点数: {len(x_interp)}")
-                print(f"总路径长度: {cumulative_distance[-1]:.2f} 米")
+                # print(f"重采样 {name}:")
+                # print(f"原始点数: {len(x)}, 重采样后点数: {len(x_interp)}")
+                # print(f"总路径长度: {cumulative_distance[-1]:.2f} 米")
                 
             except Exception as e:
-                print(f"重采样错误 {name}: {e}")
+                # print(f"重采样错误 {name}: {e}")
                 continue
         
         return resampled_lines
