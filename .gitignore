@@ -22,7 +22,7 @@ wheels/
 *.egg
 
 # Logs
-test_log/
+# test_log/
 *.log
 
 # IDE
