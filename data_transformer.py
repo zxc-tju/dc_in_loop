@@ -25,20 +25,27 @@ proj = Proj(proj_string)
 
 # 接受到data输入信息 将他转化为协同算法需要的格式
 class lon_lat_to_xy:
-    def __init__(self, data_list):
+    def __init__(self, data_list, platform="dc"):
         self.data_list = data_list
         self.veh_num = len(self.data_list)
+        self.platform = platform  # 添加平台参数
 
     def get_pos(self):
         state_dict = {}
         for veh in range(self.veh_num):
             data = self.data_list[veh]
-            # ref_point = data.refpoints[0]
             x, y = proj(data.latitude, data.longitude)
+            
+            # 根据平台处理速度单位
+            speed = float(data.speed)
+            if self.platform == "dc":  # 域控中速度单位是m/s
+                speed = speed * 3.6    # m/s 转换为 km/h
+            # 实车平台保持原样（已经是km/h）
+            
             state_dict[str(veh)] = {
                 'x': x,
                 'y': y,
-                'v': float(data.speed) * 3.6, # delete 3.6 on real car
+                'v': speed,
                 'heading': float(data.courseAngle),
                 'a': 0
             }

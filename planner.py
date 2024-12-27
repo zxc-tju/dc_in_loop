@@ -19,7 +19,7 @@ class MotionPlanner:
         self.comfort_acc = 1.0  # 舒适加速度阈值  
         self.max_acc = 0.4  # 最大加速度
         self.min_acc = -0.5  # 最大减速度
-        self.max_speed = 20.0  # 最大速度(km/h)
+        self.max_speed = 20.0  # 最大速度 km/h
         self.conflict_point = self._find_conflict_point()  # 计算冲突点
         self.target_speed = 20.0  # 目标速度 km/h
         self.max_dec = -0.5      # 最大减速度 m/s²
