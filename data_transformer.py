@@ -33,13 +33,13 @@ class lon_lat_to_xy:
     def get_pos(self):
         state_dict = {}
         for veh in range(self.veh_num):
-            data = self.data_list[veh]
-            x, y = proj(data.longitude, data.latitude)
             # 打印车辆id
             print('车辆id', veh)
+            data = self.data_list[veh]
+            x, y = proj(data.longitude, data.latitude)
             # 打印原始坐标
-            # print('原始坐标', data.longitude, data.latitude)
-            # # 打印原始坐标数据类型
+            print('原始坐标', data.longitude, data.latitude)
+            # 打印原始坐标数据类型
             # print('原始坐标数据类型', type(data.longitude), type(data.latitude))
             # 打印原始坐标数据类型
             print('坐标转换结果', x, y)

@@ -32,20 +32,29 @@ global DataFromVeh2
 global hm_pubEgo
 global hm_pubVeh1
 global hm_pubVeh2
-global flag
+global flag1
+global flagVirtual
 global csv_file
 global csv_writer
 
+flag1 = False
+flagVirtual = False
 
 # TODO: 平台选择
 platform = "car"  # or "dc"
-
+ 
 def callback(data):
-    global DataFromEgo, DataFromVeh1, DataFromVehVirtual
+    global DataFromEgo, DataFromVeh1, DataFromVehVirtual, flag1, flagVirtual
     rospy.loginfo("接收到来自Ego的信息")
     DataFromEgo = copy.deepcopy(data)
-    actionEgo, action1 = cal_action(DataFromEgo, DataFromVeh1, DataFromVehVirtual)
-    # actionEgo, action1 = cal_action(DataFromEgo, None, DataFromVehVirtual)
+    if flag1 and flagVirtual:
+        actionEgo, action1 = cal_action(DataFromEgo, DataFromVeh1, DataFromVehVirtual)
+    elif flag1 and not flagVirtual:
+        actionEgo, action1 = cal_action(DataFromEgo, DataFromVeh1, None)
+    elif not flag1 and flagVirtual:
+        actionEgo, action1 = cal_action(DataFromEgo, None, DataFromVehVirtual)    
+    else:
+        actionEgo, action1 = cal_action(DataFromEgo, DataFromVeh1, None)
 
     hm_pubEgo.publish(actionEgo)
     hm_pubVeh1.publish(action1)
@@ -53,12 +62,14 @@ def callback(data):
 
 
 def callback1(data):
-    global DataFromVeh1
+    global DataFromVeh1,flag1
+    flag1 = True
     rospy.loginfo("接收到来自Veh1的信息")
     DataFromVeh1 = copy.deepcopy(data)
 
 def callback2(data):
     global DataFromVehVirtual
+    flagVirtual = True
     rospy.loginfo("接收到来自VehVirtual的信息")
     DataFromVehVirtual = copy.deepcopy(data.RedisVirtualVehicles[0])
 
@@ -89,21 +100,17 @@ def cal_action(data1, data2=None, data3=None):
     # 获取两车参考线
     parser = ReferenceLineParser()
     reference_lines = parser.read_reference_lines('map/pre_map.csv')
-    reference_lines = parser.read_reference_lines('map/pre_map.csv')
     resampled_lines = parser.get_reference_line_segments(reference_lines, min_distance=1.0)
     
     # 计算主车的规划轨迹和加速度
     planner = MotionPlanner(state_dict, resampled_lines)
     state_dict['0']['a'] = planner.plan_ego_vehicle()
     print('主车加速度', state_dict['0']['a'])
-    print('主车加速度', state_dict['0']['a'])
     # 其他车辆沿参考线加速至目标速度，然后匀速行驶
     if data2 is not None:
         state_dict['1']['a'] = planner.plan_other_vehicle()
         print('其他车加速度', state_dict['1']['a'])
-    if data2 is not None:
-        state_dict['1']['a'] = planner.plan_other_vehicle()
-        print('其他车加速度', state_dict['1']['a'])
+
     # 计算两车油门量
     calculator = ThrottleCalculator()
     byd_result = calculator.calculate(state_dict['0']['v'], state_dict['0']['a'], 0)
@@ -111,30 +118,22 @@ def cal_action(data1, data2=None, data3=None):
         hongqi_result = calculator.calculate(state_dict['1']['v'], state_dict['1']['a'], 1)
     else:
         hongqi_result = 0
-    if data2 is not None:
-        hongqi_result = calculator.calculate(state_dict['1']['v'], state_dict['1']['a'], 1)
-    else:
-        hongqi_result = 0
 
     if platform == "car":
         actionEgo.controlCommand = str(byd_result)
-        print("主车油门量:", actionEgo)
     elif platform == "dc":
         # 将计算结果(实际上是油门量)赋值给refpoints的speed属性
         data1.refpoints[0].speed = str(byd_result)
         actionEgo.refpoints = data1.refpoints
-    
+    print("主车油门量:", round(float(byd_result), 2))
+
     if data2 is not None:
         if platform == "car":
             action1.controlCommand = str(hongqi_result)
-            print("其他车油门量:", action1)
         elif platform == "dc":
             data2.refpoints[0].speed = str(hongqi_result)
             action1.refpoints = data2.refpoints
-
-        print('油门量', round(float(byd_result), 2), round(float(hongqi_result), 2))
-    else:
-        print('油门量', round(float(byd_result), 2))
+        print("其他车油门量:", round(float(hongqi_result), 2))
     
     # 记录车辆状态到CSV
     for vehicle_id, state in state_dict.items():
@@ -184,7 +183,6 @@ def setup_csv():
     
     # 新文件使用下一个序号，并加入时间戳
     current_time = datetime.now().strftime('%Y%m%d_%H%M%S')
-    csv_filename = os.path.join(log_dir, f'test_log_{current_time}.csv')
     csv_filename = os.path.join(log_dir, f'test_log_{current_time}.csv')
     
     # 创建文件并写入表头
