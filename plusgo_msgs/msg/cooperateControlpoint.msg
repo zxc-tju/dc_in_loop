@@ -1,0 +1,4 @@
+string longitude
+string latitude
+string steeringWheelAngle
+string controlCommand
