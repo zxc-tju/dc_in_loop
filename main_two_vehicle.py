@@ -2,19 +2,18 @@
 # encoding: utf-8
 import copy
 import rospy
-# from plusgo_msgs.msg import Cooperate_refPoint
-# from plusgo_msgs.msg import Cooperate_planList
-# from plusgo_msgs.msg import Cooperate_refLine
-# # from plusgo_msgs.msg import MqttToXieTong
-# from plusgo_msgs.msg import RedisVirtualVehicles
-# from plusgo_msgs.msg import RedisVirtualVehicle
+from plusgo_msgs.msg import Cooperate_refPoint
+from plusgo_msgs.msg import Cooperate_planList
+from plusgo_msgs.msg import Cooperate_refLine
+# from plusgo_msgs.msg import MqttToXieTong
+from plusgo_msgs.msg import RedisVirtualVehicles
+from plusgo_msgs.msg import RedisVirtualVehicle
 
 # for car
 from plusgo_msgs.msg import cooperateRefline
 from plusgo_msgs.msg import cooperateControllist
 from plusgo_msgs.msg import MqttToXieTong
-from plusgo_msgs.msg import RedisVirtualVehicles
-from plusgo_msgs.msg import RedisVirtualVehicle
+
 
 import numpy as np
 from cal_throttle import ThrottleCalculator
@@ -37,13 +36,17 @@ global flag
 global csv_file
 global csv_writer
 
+
+# TODO: 平台选择
+platform = "car"  # or "dc"
+
 def callback(data):
     global DataFromEgo, DataFromVeh1, DataFromVehVirtual
     rospy.loginfo("接收到来自Ego的信息")
     DataFromEgo = copy.deepcopy(data)
     actionEgo, action1 = cal_action(DataFromEgo, DataFromVeh1, DataFromVehVirtual)
     # actionEgo, action1 = cal_action(DataFromEgo, None, DataFromVehVirtual)
-    # actionEgo, action1 = cal_action(DataFromEgo, None, DataFromVehVirtual)
+
     hm_pubEgo.publish(actionEgo)
     hm_pubVeh1.publish(action1)
     print("control published!")
@@ -58,24 +61,20 @@ def callback2(data):
     global DataFromVehVirtual
     rospy.loginfo("接收到来自VehVirtual的信息")
     DataFromVehVirtual = copy.deepcopy(data.RedisVirtualVehicles[0])
-    # print(data.RedisVirtualVehicles)
-    # print(data.RedisVirtualVehicles)
 
 
-def cal_action(data1, data2=None=None, data3=None=None):
-    # actionEgo = Cooperate_planList()
-    # action1 = Cooperate_planList()
-    
-    # for car
-    actionEgo = cooperateControllist()
-    action1 = cooperateControllist()
+def cal_action(data1, data2=None, data3=None):
+    if platform == "car":
+        actionEgo = cooperateControllist()
+        action1 = cooperateControllist()
+        actionEgo.id = "0" #biyadi
+        action1.id = "1" #hongqi
+    elif platform == "dc":
+        actionEgo = Cooperate_planList()
+        action1 = Cooperate_planList()
+        actionEgo.Id = "0" #域控1
+        action1.Id = "2" #域控3
 
-    # actionEgo.Id = "0"
-    # action1.Id = "2"
-
-    # for car
-    actionEgo.id = "0" #biyadi
-    action1.id = "1" #hongqi
 
     current_time = rospy.Time.now()
 
@@ -117,20 +116,21 @@ def cal_action(data1, data2=None=None, data3=None=None):
     else:
         hongqi_result = 0
 
-    # 将计算结果(实际上是油门量)赋值给refpoints的speed属性
-    # data1.refpoints[0].speed = str(byd_result)
-    # actionEgo.refpoints = data1.refpoints
-
-    actionEgo.controlCommand = str(byd_result)
-    print("actionego:", actionEgo)
+    if platform == "car":
+        actionEgo.controlCommand = str(byd_result)
+        print("主车油门量:", actionEgo)
+    elif platform == "dc":
+        # 将计算结果(实际上是油门量)赋值给refpoints的speed属性
+        data1.refpoints[0].speed = str(byd_result)
+        actionEgo.refpoints = data1.refpoints
     
     if data2 is not None:
-        # data2.refpoints[0].speed = str(hongqi_result)
-        # action1.refpoints = data2.refpoints
-
-        # for car
-        action1.controlCommand = str(hongqi_result)
-        print("action1:", action1)
+        if platform == "car":
+            action1.controlCommand = str(hongqi_result)
+            print("其他车油门量:", action1)
+        elif platform == "dc":
+            data2.refpoints[0].speed = str(hongqi_result)
+            action1.refpoints = data2.refpoints
 
         print('油门量', round(float(byd_result), 2), round(float(hongqi_result), 2))
     else:
@@ -203,31 +203,34 @@ if __name__ == "__main__":
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
     
-    # DataFromEgo = Cooperate_refLine()
-    # DataFromVeh1 = Cooperate_refLine()
-    # DataFromVehVirtual = RedisVirtualVehicles()
+    if platform == "dc":
+        DataFromEgo = Cooperate_refLine()
+        DataFromVeh1 = Cooperate_refLine()
+        DataFromVehVirtual = RedisVirtualVehicles()
+    elif platform == "car":
+        DataFromEgo = cooperateRefline()
+        DataFromVeh1 = cooperateRefline()
+        DataFromVeh2 = cooperateRefline()
+        DataFromVehVirtual = RedisVirtualVehicles()
 
-    # for car
-    DataFromEgo = cooperateRefline()
-    DataFromVeh1 = cooperateRefline()
-    DataFromVeh2 = cooperateRefline()
-    DataFromVirtual = RedisVirtualVehicles()
     
     rospy.init_node("fsy_intersection", anonymous=True)
-    # hm_pubEgo = rospy.Publisher("CooperateOutputMinor", Cooperate_planList, queue_size=5)
-    # hm_pubVeh1 = rospy.Publisher("CooperateOutputMinor1", Cooperate_planList, queue_size=5)
 
-    # hm_subEgo = rospy.Subscriber("CooperateInputFromMinor", Cooperate_refLine, callback, queue_size=3)
-    # hm_subVeh1 = rospy.Subscriber("CooperateInputFromMinor1", Cooperate_refLine, callback1, queue_size=3)
-    # hm_subVehVirtual = rospy.Subscriber("redis_virtual_vehicles", RedisVirtualVehicles, callback2, queue_size=3)
+    if platform == "dc":
+        hm_pubEgo = rospy.Publisher("CooperateOutputMinor", Cooperate_planList, queue_size=5)
+        hm_pubVeh1 = rospy.Publisher("CooperateOutputMinor1", Cooperate_planList, queue_size=5)
+
+        hm_subEgo = rospy.Subscriber("CooperateInputFromMinor", Cooperate_refLine, callback, queue_size=3)
+        hm_subVeh1 = rospy.Subscriber("CooperateInputFromMinor1", Cooperate_refLine, callback1, queue_size=3)
+        hm_subVehVirtual = rospy.Subscriber("redis_virtual_vehicles", RedisVirtualVehicles, callback2, queue_size=3)
     
-    #for car
-    hm_pubEgo = rospy.Publisher("CooperateOutputMain", cooperateControllist, queue_size=5)
-    hm_pubVeh1 = rospy.Publisher("CooperateOutputMinor0", cooperateControllist, queue_size=5)
+    elif platform == "car":
+        hm_pubEgo = rospy.Publisher("CooperateOutputMain", cooperateControllist, queue_size=5)
+        hm_pubVeh1 = rospy.Publisher("CooperateOutputMinor0", cooperateControllist, queue_size=5)
 
-    hm_subEgo = rospy.Subscriber("CooperateInputFromMain", cooperateRefline, callback, queue_size=3)
-    hm_subVeh1 = rospy.Subscriber("CooperateInputFromMinor0", cooperateRefline, callback1, queue_size=3)
-    hm_subVehVirtual = rospy.Subscriber("redis_virtual_vehicles", RedisVirtualVehicles, callback2, queue_size=3)
+        hm_subEgo = rospy.Subscriber("CooperateInputFromMain", cooperateRefline, callback, queue_size=3)
+        hm_subVeh1 = rospy.Subscriber("CooperateInputFromMinor0", cooperateRefline, callback1, queue_size=3)
+        hm_subVehVirtual = rospy.Subscriber("redis_virtual_vehicles", RedisVirtualVehicles, callback2, queue_size=3)
 
     rate = rospy.Rate(100)
     rospy.spin()
