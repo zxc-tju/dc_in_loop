@@ -8,6 +8,13 @@ from plusgo_msgs.msg import Cooperate_refLine
 # from plusgo_msgs.msg import MqttToXieTong
 from plusgo_msgs.msg import RedisVirtualVehicles
 from plusgo_msgs.msg import RedisVirtualVehicle
+
+# for car
+from plusgo_msgs.msg import cooperateRefline
+from plusgo_msgs.msg import cooperateControllist
+from plusgo_msgs.msg import MqttToXieTong
+
+
 import numpy as np
 from cal_throttle import ThrottleCalculator
 from data_transformer import lon_lat_to_xy
@@ -25,37 +32,61 @@ global DataFromVeh2
 global hm_pubEgo
 global hm_pubVeh1
 global hm_pubVeh2
-global flag
+global flag1
+global flagVirtual
 global csv_file
 global csv_writer
 
+flag1 = False
+flagVirtual = False
+
+# TODO: 平台选择
+platform = "car"  # or "dc"
+ 
 def callback(data):
-    global DataFromEgo, DataFromVeh1, DataFromVehVirtual
+    global DataFromEgo, DataFromVeh1, DataFromVehVirtual, flag1, flagVirtual
     rospy.loginfo("接收到来自Ego的信息")
     DataFromEgo = copy.deepcopy(data)
-    actionEgo, action1 = cal_action(DataFromEgo, DataFromVeh1, DataFromVehVirtual)
-    # actionEgo, action1 = cal_action(DataFromEgo, None, DataFromVehVirtual)
+    if flag1 and flagVirtual:
+        actionEgo, action1 = cal_action(DataFromEgo, DataFromVeh1, DataFromVehVirtual)
+    elif flag1 and not flagVirtual:
+        actionEgo, action1 = cal_action(DataFromEgo, DataFromVeh1, None)
+    elif not flag1 and flagVirtual:
+        actionEgo, action1 = cal_action(DataFromEgo, None, DataFromVehVirtual)    
+    else:
+        actionEgo, action1 = cal_action(DataFromEgo, DataFromVeh1, None)
+
     hm_pubEgo.publish(actionEgo)
     hm_pubVeh1.publish(action1)
+    print("control published!")
 
 
 def callback1(data):
-    global DataFromVeh1
+    global DataFromVeh1,flag1
+    flag1 = True
     rospy.loginfo("接收到来自Veh1的信息")
     DataFromVeh1 = copy.deepcopy(data)
 
 def callback2(data):
     global DataFromVehVirtual
+    flagVirtual = True
     rospy.loginfo("接收到来自VehVirtual的信息")
     DataFromVehVirtual = copy.deepcopy(data.RedisVirtualVehicles[0])
-    # print(data.RedisVirtualVehicles)
 
 
 def cal_action(data1, data2=None, data3=None):
-    actionEgo = Cooperate_planList()
-    action1 = Cooperate_planList()
-    actionEgo.Id = "0"
-    action1.Id = "2"
+    if platform == "car":
+        actionEgo = cooperateControllist()
+        action1 = cooperateControllist()
+        actionEgo.id = "0" #biyadi
+        action1.id = "1" #hongqi
+    elif platform == "dc":
+        actionEgo = Cooperate_planList()
+        action1 = Cooperate_planList()
+        actionEgo.Id = "0" #域控1
+        action1.Id = "2" #域控3
+
+
     current_time = rospy.Time.now()
 
     # 转换状态信息
@@ -64,7 +95,7 @@ def cal_action(data1, data2=None, data3=None):
         vehicle_data.append(data2)
     if data3 is not None:
         vehicle_data.append(data3)
-    state_dict = lon_lat_to_xy(vehicle_data, platform="dc").get_pos()
+    state_dict = lon_lat_to_xy(vehicle_data, platform="car0;l").get_pos()
     
     # 获取两车参考线
     parser = ReferenceLineParser()
@@ -79,6 +110,7 @@ def cal_action(data1, data2=None, data3=None):
     if data2 is not None:
         state_dict['1']['a'] = planner.plan_other_vehicle()
         print('其他车加速度', state_dict['1']['a'])
+
     # 计算两车油门量
     calculator = ThrottleCalculator()
     byd_result = calculator.calculate(state_dict['0']['v'], state_dict['0']['a'], 0)
@@ -87,25 +119,30 @@ def cal_action(data1, data2=None, data3=None):
     else:
         hongqi_result = 0
 
-    # 将计算结果(实际上是油门量)赋值给refpoints的speed属性
-    data1.refpoints[0].speed = str(byd_result)
-    actionEgo.refpoints = data1.refpoints
-    
+    if platform == "car":
+        actionEgo.controlCommand = str(byd_result)
+    elif platform == "dc":
+        # 将计算结果(实际上是油门量)赋值给refpoints的speed属性
+        data1.refpoints[0].speed = str(byd_result)
+        actionEgo.refpoints = data1.refpoints
+    print("主车油门量:", round(float(byd_result), 2))
+
     if data2 is not None:
-        data2.refpoints[0].speed = str(hongqi_result)
-        action1.refpoints = data2.refpoints
-        print('油门量', round(float(actionEgo.refpoints[0].speed), 2), round(float(action1.refpoints[0].speed), 2))
-    else:
-        print('油门量', round(float(actionEgo.refpoints[0].speed), 2))
+        if platform == "car":
+            action1.controlCommand = str(hongqi_result)
+        elif platform == "dc":
+            data2.refpoints[0].speed = str(hongqi_result)
+            action1.refpoints = data2.refpoints
+        print("其他车油门量:", round(float(hongqi_result), 2))
     
     # 记录车辆状态到CSV
     for vehicle_id, state in state_dict.items():
         # 只有车辆0和1有油门量数据
         throttle = 0.0
         if vehicle_id == '0':
-            throttle = float(data1.refpoints[0].speed)
+            throttle = float(byd_result)
         elif vehicle_id == '1' and data2 is not None:
-            throttle = float(data2.refpoints[0].speed)
+            throttle = float(hongqi_result)
         
         row = [
             f"{current_time.to_sec():.3f}",  # 时间戳，精确到毫秒
@@ -164,16 +201,34 @@ if __name__ == "__main__":
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
     
-    DataFromEgo = Cooperate_refLine()
-    DataFromVeh1 = Cooperate_refLine()
-    DataFromVehVirtual = RedisVirtualVehicles()
+    if platform == "dc":
+        DataFromEgo = Cooperate_refLine()
+        DataFromVeh1 = Cooperate_refLine()
+        DataFromVehVirtual = RedisVirtualVehicles()
+    elif platform == "car":
+        DataFromEgo = cooperateRefline()
+        DataFromVeh1 = cooperateRefline()
+        DataFromVeh2 = cooperateRefline()
+        DataFromVehVirtual = RedisVirtualVehicles()
+
     
     rospy.init_node("fsy_intersection", anonymous=True)
-    hm_pubEgo = rospy.Publisher("CooperateOutputMinor", Cooperate_planList, queue_size=5)
-    hm_pubVeh1 = rospy.Publisher("CooperateOutputMinor1", Cooperate_planList, queue_size=5)
 
-    hm_subEgo = rospy.Subscriber("CooperateInputFromMinor", Cooperate_refLine, callback, queue_size=3)
-    hm_subVeh1 = rospy.Subscriber("CooperateInputFromMinor1", Cooperate_refLine, callback1, queue_size=3)
-    hm_subVehVirtual = rospy.Subscriber("redis_virtual_vehicles", RedisVirtualVehicles, callback2, queue_size=3)
+    if platform == "dc":
+        hm_pubEgo = rospy.Publisher("CooperateOutputMinor", Cooperate_planList, queue_size=5)
+        hm_pubVeh1 = rospy.Publisher("CooperateOutputMinor1", Cooperate_planList, queue_size=5)
+
+        hm_subEgo = rospy.Subscriber("CooperateInputFromMinor", Cooperate_refLine, callback, queue_size=3)
+        hm_subVeh1 = rospy.Subscriber("CooperateInputFromMinor1", Cooperate_refLine, callback1, queue_size=3)
+        hm_subVehVirtual = rospy.Subscriber("redis_virtual_vehicles", RedisVirtualVehicles, callback2, queue_size=3)
+    
+    elif platform == "car":
+        hm_pubEgo = rospy.Publisher("CooperateOutputMain", cooperateControllist, queue_size=5)
+        hm_pubVeh1 = rospy.Publisher("CooperateOutputMinor0", cooperateControllist, queue_size=5)
+
+        hm_subEgo = rospy.Subscriber("CooperateInputFromMain", cooperateRefline, callback, queue_size=3)
+        hm_subVeh1 = rospy.Subscriber("CooperateInputFromMinor0", cooperateRefline, callback1, queue_size=3)
+        hm_subVehVirtual = rospy.Subscriber("redis_virtual_vehicles", RedisVirtualVehicles, callback2, queue_size=3)
+
     rate = rospy.Rate(100)
     rospy.spin()
