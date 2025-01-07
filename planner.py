@@ -68,6 +68,9 @@ class MotionPlanner:
             if dist < min_dist:
                 min_dist = dist
                 vehicle_idx = i
+        print(f'{vehicle_id}号车辆到参考线最近点的距离', min_dist)
+        # print('参考线最近点', reference_line['x'][vehicle_idx], reference_line['y'][vehicle_idx])
+        # print('车辆最近点', vehicle_state['x'], vehicle_state['y'])
         
         # 找到冲突点在参考线上的投影点索引
         min_dist = float('inf')
@@ -80,6 +83,7 @@ class MotionPlanner:
             if dist < min_dist:
                 min_dist = dist
                 conflict_idx = i
+        # print('冲突点到参考线最近点的距离', min_dist)
         
         # 计算沿参考线的累积距离
         distance = 0

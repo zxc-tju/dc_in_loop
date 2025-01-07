@@ -9,12 +9,6 @@ from plusgo_msgs.msg import Cooperate_refLine
 from plusgo_msgs.msg import RedisVirtualVehicles
 from plusgo_msgs.msg import RedisVirtualVehicle
 
-# for car
-from plusgo_msgs.msg import cooperateRefline
-from plusgo_msgs.msg import cooperateControllist
-from plusgo_msgs.msg import MqttToXieTong
-
-
 import numpy as np
 from cal_throttle import ThrottleCalculator
 from data_transformer import lon_lat_to_xy
@@ -38,10 +32,10 @@ global csv_file
 global csv_writer
 
 flag1 = False
-flagVirtual = False
+flagVirtual = True
 
 # TODO: 平台选择
-platform = "car"  # or "dc"
+platform = "dc"  # or "dc"
  
 def callback(data):
     global DataFromEgo, DataFromVeh1, DataFromVehVirtual, flag1, flagVirtual
@@ -62,14 +56,12 @@ def callback(data):
 
 
 def callback1(data):
-    global DataFromVeh1,flag1
-    flag1 = True
+    global DataFromVeh1, flag1
     rospy.loginfo("接收到来自Veh1的信息")
     DataFromVeh1 = copy.deepcopy(data)
 
 def callback2(data):
-    global DataFromVehVirtual
-    flagVirtual = True
+    global DataFromVehVirtual, flagVirtual
     rospy.loginfo("接收到来自VehVirtual的信息")
     DataFromVehVirtual = copy.deepcopy(data.RedisVirtualVehicles[0])
 
@@ -95,7 +87,7 @@ def cal_action(data1, data2=None, data3=None):
         vehicle_data.append(data2)
     if data3 is not None:
         vehicle_data.append(data3)
-    state_dict = lon_lat_to_xy(vehicle_data, platform="car0;l").get_pos()
+    state_dict = lon_lat_to_xy(vehicle_data, platform=platform, flag1=flag1).get_pos()
     
     # 获取两车参考线
     parser = ReferenceLineParser()
@@ -223,6 +215,10 @@ if __name__ == "__main__":
         hm_subVehVirtual = rospy.Subscriber("redis_virtual_vehicles", RedisVirtualVehicles, callback2, queue_size=3)
     
     elif platform == "car":
+        from plusgo_msgs.msg import cooperateRefline
+        from plusgo_msgs.msg import cooperateControllist
+        from plusgo_msgs.msg import MqttToXieTong
+
         hm_pubEgo = rospy.Publisher("CooperateOutputMain", cooperateControllist, queue_size=5)
         hm_pubVeh1 = rospy.Publisher("CooperateOutputMinor0", cooperateControllist, queue_size=5)
 

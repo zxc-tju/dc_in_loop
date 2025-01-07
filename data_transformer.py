@@ -25,10 +25,11 @@ proj = Proj(proj_string)
 
 # 接受到data输入信息 将他转化为协同算法需要的格式
 class lon_lat_to_xy:
-    def __init__(self, data_list, platform="dc"):
+    def __init__(self, data_list, platform="dc", flag1=False):
         self.data_list = data_list
         self.veh_num = len(self.data_list)
         self.platform = platform  # 添加平台参数
+        self.flag1 = flag1
 
     def get_pos(self):
         state_dict = {}
@@ -38,7 +39,7 @@ class lon_lat_to_xy:
             data = self.data_list[veh]
             x, y = proj(data.longitude, data.latitude)
             # 打印原始坐标
-            print('原始坐标', data.longitude, data.latitude)
+            # print('原始坐标', data.longitude, data.latitude)
             # 打印原始坐标数据类型
             # print('原始坐标数据类型', type(data.longitude), type(data.latitude))
             # 打印原始坐标数据类型
@@ -49,9 +50,11 @@ class lon_lat_to_xy:
             
             # 根据平台处理速度单位
             speed = float(data.speed)
-            if self.platform == "dc":  # 域控中速度单位是m/s
+            if self.platform == "dc" and veh == 0:  # 域控中速度单位是m/s
                 speed = speed * 3.6    # m/s 转换为 km/h
             # 实车平台保持原样（已经是km/h）
+            if self.platform == "dc" and veh == 1 and self.flag1                                                                                                                                                        :
+                speed = speed * 3.6
             
             # 打印速度
             print('速度', round(speed, 2), 'km/h')
@@ -165,20 +168,23 @@ class ReferenceLineParser:
             x_values = group['X'].values
             y_values = group['Y'].values
             
+            # 打印第一个座标点
+            # print('第一个座标点', x_values[0], y_values[0])
+
             # 打印坐标范围
             # print(f"X坐标范围: {x_values.min():.6f} 到 {x_values.max():.6f}")
             # print(f"Y坐标范围: {y_values.min():.6f} 到 {y_values.max():.6f}")
             
             # 将坐标原点平移到数据范围的中心
-            x_center = (x_values.max() + x_values.min()) / 2
-            y_center = (y_values.max() + y_values.min()) / 2
+            # x_center = (x_values.max() + x_values.min()) / 2
+            # y_center = (y_values.max() + y_values.min()) / 2
             
-            x_meters = x_values - x_center
-            y_meters = y_values - y_center
+            # x_meters = x_values - x_center
+            # y_meters = y_values - y_center
             
             reference_lines[name] = {
-                'x': x_meters,
-                'y': y_meters,
+                'x': x_values,  # 将x坐标作为y坐标,与轨迹点保持一致
+                'y': y_values,
                 'time': group['Time'].values
             }
             
